@@ -1,1 +1,1 @@
-Here I've collected a few scripts for various statistical tests and analyses. 
+Here I've collected a few scripts for various statistical tests and analyses. I wrote these scripts for a course in the Statistics department at Columbia's Graduate School of Arts and Sciences, R5291 Advanced Data Analysis. 
