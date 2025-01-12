@@ -1,0 +1,77 @@
+---
+title: "Multiple linear regression & least median of squares"
+author: "Brendan Mapes"
+date: "9/28/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(car)
+boston <- Boston
+```
+
+_Multiple linear regression model to predict medv_ _(median value of owner-occupied homes in $1000s)_ 
+_using the following set of predictors:_
+_•crim per capita crime rate by town._
+_•zn proportion of residential land zoned for lots over 25,000 sq.ft._
+_•indus proportion of non-retail business acres per town._
+_•nox nitrogen oxides concentration (parts per 10 million)._
+_•rm average number of rooms per dwelling._
+_•age proportion of owner-occupied units built prior to 1940._
+_•tax full-value property-tax rate per \$10,000._
+
+```{r}
+lm1 <- lm(boston$medv ~ boston$crim + boston$zn + boston$indus + boston$nox + boston$rm + boston$age + boston$tax, data = boston)
+
+summary(lm1)
+
+```
+
+
+_Assessing validity of the underlying assumptions_ 
+_•Linearity/functional form_
+_•Normality_
+_•Homoscedasticity_
+_•Uncorrelated error_
+
+The assumption of functional form or linearity refers to the assumption that some linear relationship between the independent and dependent variables in this model exists. If this is not the case, linear regression is not the appropriate modeling method to use. A scatter plot of each independent variable with the dependent variable is a way to check if this assumption holds. Visual inspection of the scatterplots reveals non-linearity. Scatter plots reveal that a linear relationship really only exists with the independent variable _rm_. Therefore, removal of the other variables from the model may be necessary, or another modeling technique should be used. Futher diagnostic tools for this assumption include looking at the R squared value, which is included in the above summary of the model, and plots of residuals versus X. One other way to correct this model may be simple transformations of the numerical values, such as log transformation, to get closer to a linear relationship with some of these variables. OTherwise, these predictors may simply not be the right choices to include in the model. 
+
+```{r}
+crim <- plot(boston$crim, boston$medv)
+zn <- plot(boston$zn, boston$medv)
+indus <- plot(boston$indus, boston$medv)
+nox <- plot(boston$nox, boston$medv)
+rm <- plot(boston$rm, boston$medv)
+age <- plot(boston$age, boston$medv)
+tax <- plot(boston$tax, boston$medv)
+```
+The normality assumption refers to the fact that the residuals of the model are normally distributed. The p-values and confidence intervals cannot be trusted when this is not the case. This assumption can be tested graphically as well, with histograms, like included below, or qqnorm plots of the residuals. The Kolmogorov-Smirnov test on the residuals also will test this assumption. If this assumption is violated, transformation of the values can again be used, or robust regression methods should be favored. The histogram below suggests the normality assumption may actually hold in this case.
+
+```{r}
+residuals <- lm1$residuals
+hist(residuals)
+```
+
+The homoscedasticity assumption requires that residuals have a constant variance through every value of x. This assumption can be tested by a simple plot of residuals of the model versus the predicted values. No clear pattern in the distribution should exist in that plot if homoscedasticity is present. If this assumption is violated, transformation may be a simple solution again, or a variance structure should be built into the model with weighted least squares regression instead of simple OLS regression. There is some pattern in the plot included below when residuals exceed 10, suggesting some slight violation of homoscedasticity here. 
+
+```{r}
+residuals <- plot(lm1$residuals, lm1$fitted.values)
+```
+The uncorrelated errors assumption refers to the need for residuals of the model to be independent. There cannot be high correlation between residuals across the values of x. This can be tested by plotting residuals data over time, understanding the design of the study/data collection, or by the Durbin-Watson test for 1st order autocorrelation. If this assumption is violated, transformation in the form of the Cochrane-Orcutt procedure should be used, or generalized estimating equations could be used in order to incorporate correlation structures into the model, instead of OLS regression. Durbin Watson test below suggests that there is some autocorrelation present (D-W statistic >0, <2). However, high p-value suggests this statistic may not be reliable. Further testing may be necessary, but otherwise it should be assumed this assumption is violated.  
+
+```{r}
+durbinWatsonTest(lm1)
+```
+
+
+_Repeating gwith Least Median of Squares Regression and comparing the results._
+
+```{r}
+lm2 <- lmsreg(boston$medv ~ boston$crim + boston$zn + boston$indus + boston$nox + boston$rm + boston$age + boston$tax, data = boston)
+
+lm1
+lm2
+```
+In reality, a linear model may not be the correct strategy for this scenario of multiple independent variables. The Least Median of Squares Regression has a higher breakdown point, and can withstand higher levels of contaminated data than the OLS regression can. However neither seem to be revealing meaningful results that follow some basic intuition about the data in the Boston data set. The coefficients for the least median of squares are much smaller in magnitude across the board, with the exception of the coefficient for the _rm_ , and _nox_ variables. This suggests, as expected, that the least median of squares regression has been less sensitive to the data in suggesting potential relationships, again suggesting it has a high breakdown point, which is the primary strength of least median of squares regression. 
