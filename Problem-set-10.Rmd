@@ -1,0 +1,41 @@
+---
+title: "Cox proportional hazards model"
+author: "Brendan Mapes"
+date: "11/28/2021"
+output: html_document
+---
+```{r}
+library(survival)
+library(dplyr)
+library(magrittr)
+library(survminer)
+lung <- data(cancer)
+lung <- cancer %>% select(inst, time, status, age, sex)
+```
+
+_Using Cox proportional hazards model to estimate the hazard rate for Male relative to Female, without including “age” or other variables in the model_
+```{r}
+fitcox <- coxph(Surv(time, status) ~ sex, data = lung)
+summary(fitcox)
+```
+The female hazard rate is 0.588 times that of the male hazard rate. In other words, being male corresponds to a higher hazard rate, or worse prognosis. The coefficient for sex is statistically significant to the 0.001 level, so we can trust these results as real rather than occurring by chance. 
+
+_Assessing the validity of the proportional hazards assumption._
+```{r}
+prop_haz <- cox.zph(fitcox)
+prop_haz
+```
+```{r}
+ggcoxzph(prop_haz)
+```
+To check the proportional hazards assumption, first we can look to the output of prop_haz, or a call to cox.zph() on our model. P-values in this output that often would not be considered statistically significant suggest that the proportional hazards assumption is valid in this case. However, because the p-value is fairly low, we can look to the graphical output above to validate this assumption further. There is no obvious pattern in the scaled Schoenfeld residuals against transformed time, suggesting again that the assumption here is valid. 
+(http://sthda.com/english/wiki/cox-model-assumptions)
+
+_Adjusting for “age”._
+```{r}
+fitcox2 <- coxph(Surv(time, status) ~ sex + age, data = lung)
+summary(fitcox2)
+```
+Adding in an adjustment for age here suggests that even when considering age, the hazard rate for females is about 0.60 times that of the hazard rate for males. In other words, this test confirms that the hazard rate for males is higher, corresponding to a worse prognosis for men on average, when adjusting for age. 
+
+The hazard rate for age here is listed at 1.0172, which suggests that increased age does correspond to slight increase in hazard rate as one may expect, on average when adjusting for sex. However, while the coefficient for sex has a p-value that is statistically significant at the 0.001 level, the coefficient for age only has a p-value indicating significance to the 0.1 level, so we cannot be as sure that the relationship for age wasn't observed simply by chance. Considered with the fact that the hazard rate is so close to 1, we'd probably be smart to label the observed relationship for age itself as insignificant in this model. 

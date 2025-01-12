@@ -1,0 +1,93 @@
+---
+title: "Logistic regression and L-1 regularization"
+author: "Brendan Mapes"
+date: "10/29/2021"
+output: html_document
+---
+_Considering the ChickWeight data in R. The body weights of the chicks were measured at birth (i.e., time=0) and every second day thereafter until day 20. They were also measured on day 21. There were four groups of chicks on different protein diets. Categorizing‘weight’ as a binary variable, with WeightGroup = 1 (or Low), if weight < 110 mg,  and 0, Otherwise._ 
+```{r setup, include=FALSE}
+library(dplyr)
+library(magrittr)
+
+chick <- ChickWeight
+chick <- chick %>% mutate(weightgroup = ifelse(chick$weight<110, 1, 0))
+```
+_Comparing Diet Levels 1 and 4 on Day 21._
+```{r}
+day_21 <- chick %>% filter(Time == 21)
+diet_1_4 <- day_21 %>% filter(Diet == 1 | Diet == 4)
+```
+
+_Determining whether there is association between Diet and WeightGroup, using logistic regression, without adjusting for Birth Weight. Interpreting estimated parameters._
+```{r}
+logreg_1a <- glm(weightgroup ~ Diet, family=binomial, diet_1_4)
+summary(logreg_1a)
+```
+The estimated parameter for Diet 4 (-17.6202) is not statistically significant. However, if it were, it could be interpreted as follows: On average, the switch from diet 1 to diet 4 corresponds to a logit odds (log-of-odds) decrease in the dependent variable of study here, weightgroup. Weightgroup has been coded here so 1 represents low weight (as directions for problem requested) and 0 equals high weight (at or above 110 mg). So, more generally, logistic regression would suggest that the switch from diet 1 to diet 4 corresponds to a shift towards the high class of the weightgroup variable. Diet "switch" is not intended to be a literal term, but simply suggests this is the change that occurs when comparing the two diet groups, when considering diet 1 the "baseline" diet. The true meaning of the logit odds is a bit of a mystery, but generally its results can be understood in this way. Regardless, the results here suggest a statistically insignificant result and a lack of correlation in reality. 
+
+_Repeating (a) adjusting for Birth Weight. Interpreting the estimated parameters._
+```{r}
+day_0 <- chick %>% filter(Time == 0)
+day_0 <- day_0 %>% select(Chick, weight)
+day_0 <- rename(day_0, birth_weight = weight)
+diet_1_4 <- left_join(diet_1_4, day_0, by = "Chick")
+
+logreg_1b <- glm(weightgroup ~ Diet + birth_weight, family=binomial, diet_1_4)
+summary(logreg_1b)
+```
+Here the coefficient for diet 4 () is again statistically insignificant. It is nearly the same estimate provided by the model that doesn't include birth weight as a control variable. Again, the model would suggest, if statistically significant results were given, that the switch from diet 1 to diet 4 corresponds to a decrease in the log odds of weightgroup by 17.68625, suggesting that the switch to diet 4 corresponds with a switch to the high class of weight group (weightgroup=0). The birth_weight coefficient estimate (-0.09702) is also statistically insignificant, but would indicate that net of diet group, a one mg increase in birth weight corresponds to a 0.09702 decrease in the log odds of weight group, or a shift towards the high class in weight group. However, both these results are insignificant, suggesting such relationships are not actually present, and these observations could have happened simply by chance. 
+
+_Repeating for all 4 Diet Levels_
+```{r}
+all_diets <- day_21
+all_diets <- left_join(all_diets, day_0, by = "Chick")
+
+#not adjusting for birth weight
+logreg_2a <- glm(weightgroup ~ Diet, family=binomial, all_diets)
+summary(logreg_2a)
+
+#adjusting for birth weight
+logreg_2b <- glm(weightgroup ~ Diet + birth_weight, family=binomial, all_diets)
+summary(logreg_2b)
+```
+
+Again, there are no statistically significant results for these models, suggesting no relationship between diets and weight when classified as a binary variable in weight group, even when controlling for birth weight. Results for the logistic regression models here can be interpreted similarly to those of the previous problem for each of the given diet groups. However, again, these results appear to be statistically insignificant, suggesting interpretation of these variables may not be trustworthy. 
+
+When controlling for birth weight the diet2 coefficient is 0.00222, which means that a switch from diet 1 to diet 2 corresponds to a 0.00222 increase in the log odds of the dependent variable weightgroup, or a 0.00222 shift in the log odss towards the low weightgroup class. 
+
+When controlling for birth weight, the diet3 coefficient suggests the switch from diet 1 to diet 3 corresponds to a 18.33416 drop in the log odds of weightgroup, or a shift in log odds that favors the high weight class.
+
+When controlling for birth weight, the diet4 coefficient suggests the switch from diet 1 to diet 4 corresponds to a 18.37111 drop in the log odds of the dependndent variable, or a shift in the log odds that favors the high weight class in weightgroup. 
+The birth_weight coefficient of 0.37954 suggests that, net of diet group, a one unit (mg) increase in birth weight corresponds to a 0.37954 increase in the log odds of weight group, or a shift in the log odds that favors the low weight group, which is odd. 
+
+The results of the model that doesn't control for birth weight can be interpreted very similarly, with almost identical results for each diet group, except in the case of diet2, where the sign is reversed, suggesting a decrease in the log odds of weight group, corresponding to the switch from diet 1 to diet 2.
+
+Again, its important to note all these results are statistically insignificant. One important clarification: when the terms "switch from one diet group to another" are used throughout these descriptions, it simply means those two diets are being compared with the first diet being considered sort of a baseline, not that a chick has literally been switched which diet they are on. 
+
+_Repeating using the L-1 regularized logistic regression_
+```{r}
+#not controlling for birth_weight
+library(glmnet)
+
+x <- diet_1_4 %>% select(Diet, birth_weight) %>% data.matrix()
+y <- diet_1_4$weightgroup %>% data.matrix()
+
+l1_logreg <- glmnet(x,y)
+summary(l1_logreg)
+cvfit <- cv.glmnet(x,y)
+plot(cvfit)
+coef(cvfit)
+```
+You can see here in the output of coef(cvfit) that cross validation on the glmnet model actually dropped both the diet and birth_weight variables, which reinforces the previous analyses provided. It suggests there is not statistically significant relationship between diet and weightgroup variables, controlling for birth weight, and that there is not a statistically significant relationship between the birth_weight and weightgroup variables, controlling for diet. One note on this problem, in "repeating 1 using the l-1 regularized logistic regression" I struggled to recreate a model that didn't include control for the birth_weight variable. Because glmnet's x parameter must be a matrix of at least 2 columns, I had to include the birth_weight variable in the model. One alternative would have been to include some other variable from the dataset that I knew had no effect on weightgroup, like potentially chick number/id. I assumed because there were no other variables mentioned in the problem's directions, that including birth_weight here in the model was the intended course of action. For sake of completeness, I've included such a model below, that again shows that the Diet variable was dropped when performing cross validation on the l1 regularized logistic regression model, suggesting no statistically significant relationship between diet and the binary classfication of weightgroup. 
+
+```{r,RUN=FALSE}
+x <- diet_1_4 %>% select(Diet, Chick) %>% data.matrix()
+y <- diet_1_4$weightgroup %>% data.matrix()
+
+l1_logreg_a <- glmnet(x,y)
+summary(l1_logreg)
+cvfit <- cv.glmnet(x,y)
+plot(cvfit)
+coef(cvfit)
+```
+

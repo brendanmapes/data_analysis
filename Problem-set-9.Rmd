@@ -1,0 +1,48 @@
+---
+title: "Survival Functions: Kaplan-Meier, Fleming-Harrington"
+author: "Brendan Mapes"
+date: "11/19/2021"
+output: html_document
+---
+_Estimating the survival curves for time by SEX using the following methods:Kaplan-Meier, Fleming-Harrington._
+
+```{r}
+library(survival)
+library(dplyr)
+library(magrittr)
+library(survminer)
+lung <- data(cancer)
+lung <- cancer %>% select(inst, time, status, age, sex)
+kmfit <- survfit(Surv(time, status) ~ sex, data=lung)
+ggsurvplot(
+    fit = kmfit, 
+    xlab = "Days", 
+    ylab = "Overall survival probability")
+```
+Important to note on these plots, sex 1 refers to male, and sex 2 refers to female. Line colors here aren't assigned as one may expect. Above is the plot from Kaplan-Meier method, and below is plot from the Fleming-Harrington method.
+```{r}
+fhfit <- survdiff(Surv(time, status) ~ sex, data=lung, rho=0)
+fhfit2 <- survfit(Surv(time, status) ~ sex, data=lung, type="fleming-harrington")
+ggsurvplot(
+    fit = fhfit2, 
+    xlab = "Days", 
+    ylab = "Overall survival probability")
+```
+
+```{r}
+kmfit
+```
+
+```{r}
+fhfit2
+```
+_Estimating the median survival time, using the estimated survival curves._
+Median survival rates on the plot can be found by locating the point on the x-axis that corresponds to 0.5 probability of survival on the y-axis on the survival curve. More simply in R, we can look to the outputs above for median estimates. The Kaplan-Meier method results in estimates of median survival of 270 days for males and 426 days for females. Fleming-Harrington gives estimates of 218 days for males and 348 days for females.
+
+_Using log-rank test to compare the survival distributions for Male and Female_
+```{r}
+log_rank <- survdiff(Surv(time, status) ~ sex, data = lung)
+log_rank
+```
+The log rank test with survdiff() suggests that the males live longer on average, although there are more males in the dataset than there are females. 
+

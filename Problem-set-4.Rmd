@@ -1,0 +1,121 @@
+---
+title: "Linear Regression, Principal Component Regression, Lasso & Stepwise"
+author: "Brendan Mapes"
+date: "10/7/2021"
+output: html_document
+---
+
+_Investigating for multicollinearity._
+```{r}
+library(MASS)
+library(car)
+boston <- Boston
+lm1 <- lm(boston$medv ~ boston$crim + boston$zn + boston$indus + boston$nox + boston$rm + boston$age + boston$tax, data = boston)
+summary(lm1)
+x_vars <- boston[, c(1,2,3,5,6,7,10)]
+cor(x_vars)
+vif(lm1)
+```
+Based off variance inflation factor calculation by the VIF function from the car package in R, it doesn't appear multicollinearity is confusing the results for any of the available predictor variables. If VIF were exceptionally large for any of the included variables, removing it from the model may solve the issue. Otherwise, principal component regression or ridge regression should be utilized instead of multiple linear regression. 
+
+_Compare results of linear regression and Principal Component Regression to predict  ‘medv' based on the  available variables._
+```{r}
+library(pls)
+set.seed(1234)
+pcr_version <- pcr(boston$medv ~ boston$crim + boston$zn + boston$indus + boston$nox + boston$rm + boston$age + boston$tax, data = boston, scale = TRUE, validation = "CV")
+summary(pcr_version)
+summary(lm1)
+```
+```{r}
+validationplot(pcr_version)
+validationplot(pcr_version, val.type="MSEP")
+validationplot(pcr_version, val.type="R2")
+```
+PCR results suggest that 3 components dominate this model. However, in reality, PCR is likely not necessary here, as results to the first problem suggested multicollinearity wasn't an issue in this example. To complete PCR modeling, data could be split into training and test data before running the pcr function, then the pcr function could be used again to predict on the test set, with the number of components suggested to be dominating the model, 3 in this case. That computation is inlcuded below. And high RSME suggests PCR hasn't improved the model. Note: This method follows roughly the outlined method published at https://www.r-bloggers.com/2016/07/performing-principal-components-regression-pcr-in-r/#:~:text=Performing%20Principal%20Components%20Regression%20%28PCR%29%20in%20R%201,5%20Performing%20PCR%20on%20a%20test%20dataset.%20.
+
+```{r}
+training <- boston[1:400,]
+y_test <- boston[401:500, 14]
+test <- boston[401:500, 1:13]
+
+pcr <- pcr(training$medv ~ training$crim + training$zn + training$indus + training$nox + training$rm + training$age + training$tax, data = training, scale = TRUE, validation = "CV")
+
+prediction <- predict(pcr, test, ncomp = 3)
+mean((prediction - y_test)^2)
+
+```
+
+
+_Comparing models selected using lasso vs a stepwise procedure to predict ‘medv' using all available variables._
+
+## Lasso
+
+
+```{r}
+library(glmnet)
+x_var <- model.matrix(boston$medv ~ boston$crim + boston$zn + boston$indus + boston$nox + boston$rm + boston$age + boston$tax)[,-1]
+y_var <- boston$medv
+lambda <- 10^seq(2,-2, by=-.1)
+
+
+#split train and test
+train_b = sample(1:nrow(x_var), nrow(x_var)/2)
+x_test = (-train_b)
+y_test = y_var[x_test]
+
+cv <- cv.glmnet(x_var[train_b,], y_var[train_b], alpha = 1, lambda = lambda, nfolds = 5)
+
+#optimal lambda
+lambda_optimal <- cv$lambda.min
+lambda_optimal
+
+final_model <- glmnet(x_var[train_b,],y_var[train_b], alpha=1, lambda=lambda_optimal)
+prediction_b <- predict(final_model, s=lambda_optimal, newx=x_var[x_test,])
+
+
+coef(final_model)
+```
+## Forward stepwise
+```{r}
+library(stats)
+
+intercept_only <- lm(boston$medv ~ 1, data = boston)
+
+all_predictors <- lm(boston$medv~boston$crim + boston$zn + boston$indus + boston$nox + boston$rm + boston$age + boston$tax, data=boston)
+
+forward_step <- step(intercept_only, direction='forward', scope=formula(all_predictors), trace=0)
+
+forward_step$anova
+coef(forward_step)
+
+```
+Generally, the models produce similar results. Both models seem to be in agreement that the variables of nox and indus have little to no effect on the dependent variable medv. The other coefficients are all very close across the two models, with the largest discrepancy coming in the coefficient for crim. All the coefficients match in sign to across the models, and vary slightly in magnitude. 
+
+
+_Comparing the various procedures.Rate the performance of procedures:1 = Good, 2 = Fair, 3 = Poor._
+
+1. Performance when p >> n
+    + OLS: 3
+    + Ridge: 2
+    + Lasso: 1
+    + Elastic Net: 1
+2. Performance under multicollinearity
+    + OLS: 3
+    + Ridge: 1
+    + Lasso: 2
+    + Elastic Net: 1
+3. Unbiased Estimation
+    + OLS: 1
+    + Ridge: 2
+    + Lasso: 3
+    + Elastic Net: 2
+4. Model Selection
+    + OLS: 3
+    + Ridge: 2
+    + Lasso: 1
+    + Elastic net: 1
+5. Simplicity, Computation, Inference, Interpretation
+    + OLS: 1
+    + Ridge: 2
+    + Lasso: 2
+    + Elastic Net: 3

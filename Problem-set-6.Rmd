@@ -1,0 +1,103 @@
+---
+title: "ANCOVA, Repeated measures ANOVA"
+author: "Brendan Mapes"
+date: "10/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(magrittr)
+library(dplyr)
+library(lsmeans)
+library(rstatix)
+library(ggpubr)
+library(tidyverse)
+library(broom)
+chick <- ChickWeight
+```
+
+_Using ANCOVA adjusting for baseline to determine whether there is a significant difference in the mean weights of the four groups, separately at each timepoint: Day  16, Day 20 and Day 21._
+```{r}
+day_16 <- filter(chick, Time ==16)
+day_20 <- filter(chick, Time ==20)
+day_21 <- filter(chick, Time == 21)
+day_0 <- chick %>% filter(Time == 0)
+day_0 <- day_0 %>% select(Chick, weight)
+day_0 <- rename(day_0, birth_weight = weight)
+day_0_16 <- left_join(day_16, day_0, by = "Chick")
+day_0_20 <- left_join(day_20, day_0, by = "Chick")
+day_0_21 <- left_join(day_21, day_0, by = "Chick")
+
+ancova_day16 <- aov(day_16$weight ~ day_0_16$Diet + day_0_16$birth_weight, data = day_0_16)
+ancova_day20 <- aov(day_20$weight ~ day_0_20$Diet + day_0_20$birth_weight, data = day_0_20)
+ancova_day21 <- aov(day_21$weight ~ day_0_21$Diet + day_0_21$birth_weight, data = day_0_21)
+
+all_days <- rbind(day_0_16, day_0_20, day_0_21)
+
+summary(ancova_day16)
+summary(ancova_day20)
+summary(ancova_day21)
+```
+According to summary results for ANCOVA for each of the three days, it appears there is significant difference in the mean weights of the four groups at each day, on average when controlling for birth weight. On Day 16, the difference is statistically significant to the 0.05 level (one star), but on Day 20 and Day 21 the difference is statistically significant to the 0.01 level (two stars).
+
+
+_Repeated measures ANOVA, adjusting for baseline, to determine whether there is a significant difference in the mean weights of the four groups using the measurements on Days  16, 20, and 21._
+
+```{r}
+day_0 <- filter(chick, Time == 0)
+chick2 <- rbind(day_0, day_16, day_20, day_21)
+chick2 <- count(chick2, Chick)
+chick2 <- filter(chick2, n == 4)
+chick2 <- select(chick2, Chick)
+chicks <- rbind(day_0, day_16, day_20, day_21)
+chick2 <- left_join(chick2, chicks)
+chick2 <- chick2 %>% group_by(Diet, Time)
+chick2$Diet <- as.factor(chick2$Diet)
+chick2$Time <- as.factor(chick2$Time)
+repeated.aov <- aov(chick2$weight~chick2$Diet*chick2$Time+Error(factor(chick2$Chick))) 
+summary(repeated.aov)
+```
+According to repeated measures ANOVA, considering time of birth as the first of four total time measurements, there is a statistically significant difference (0.01 level) among the mean weights of each of the separate diet groups, and also there is a statistically significant (0.001 level) difference between each of the group's own measurements across the time variable. There also appears to be a statistically significant (0.001 level) interaction between diet and time variables. 
+
+_Checking the validity of assumptions in each case._
+
+1) Checking assumptions of ANCOVA (1:Linearity of covariate and outcome, 2:homogeneity of regression slopes, 3:Normally distributed y variable, 4:homoscedasticity, 5:No outliers):
+
+```{r}
+
+#linearity
+ggscatter(all_days, x="birth_weight", y="weight", color="Diet", add="reg.line")
+
+#homogeneity
+all_days %>% anova_test(weight ~ Diet*birth_weight)
+
+#normally distributed
+model <- lm(weight~birth_weight+Diet, data = all_days)
+model.metrics <- augment(model) %>% select(-.hat,-.sigma,-.fitted)
+head(model.metrics, 3)
+shapiro_test(model.metrics$.resid)
+
+#homoscedasticity
+model.metrics %>% levene_test(.resid~Diet)
+
+#outliers
+model.metrics %>% filter(abs(.std.resid) > 3) %>% as.data.frame()
+```
+The data seems to satisfy a majority of the assumptions for ANCOVA. Two assumptions not surely satisfied include linearity of covariate and outcome variable, and homoscedasticity. The Levene test resulted in a statistically significant p-value, therefore homogeneity between the residuals must be questioned. The scatter plot of covariate and outcome variable does show a linear relationship between the two variables, however, the linear relationship has opposite signs for different diet groups, so further investigation here may be necessary. In the test for homogeneity we have a p-value for the interaction term that is statistically significant at the 0.05 level, which suggests this assumption may actually be violated as well, and this could provide some explanation for the opposite slopes we see in the previous plot. 
+
+2) Checking assumptions of repeated measures ANOVA (1:No outliers, 2:Normality of outcome, sphericity)
+
+```{r}
+#outliers
+outliers <- chick2 %>% group_by(Time) %>% identify_outliers(weight)
+data.frame(outliers)
+
+#normality
+normal <- chick2 %>% group_by(Time) %>% shapiro_test(weight)
+data.frame(normal)
+ggqqplot(chick2, "weight", facet.by="Time")
+
+#sphericity
+get_anova_table(repeated.aov)
+```
+Testing of all assumptions for repeated measures ANOVA proves all are satisfied. Using the get_anova_table function automatically adjusts to satisfy the shpericity assumption. The outliers noted in the data frame are not worthy of exclusion upon closer examination. While the shapiro_test suggests some deviation from normality for the measurements of birth weight, normal qqplot suggests that these samples are indeed approximately normally distributed as necessary. Because all assumptions are satisfied for the repeated measures ANOVA, and questions remain on the assumptions for ANCOVA, I would favor the results of repeated measures ANOVA for this analysis. 
